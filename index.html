@@ -186,7 +186,64 @@
     return out;
   }
 
-  window.tts = { chunk };
+  // ---- voices:系统发音人列表 ----
+  const voices = {
+    all: [],
+    sort(list) {
+      const rank = v => {
+        const l = (v.lang || '').toLowerCase();
+        if (l.startsWith('zh')) return 0;
+        if (l.startsWith('en')) return 1;
+        return 2;
+      };
+      return [...list].sort((a, b) =>
+        rank(a) - rank(b) ||
+        (a.lang || '').localeCompare(b.lang || '') ||
+        (a.name || '').localeCompare(b.name || ''));
+    },
+    load() {
+      this.all = this.sort(window.speechSynthesis.getVoices() || []);
+      return this.all;
+    },
+    get(uri) {
+      return this.all.find(v => v.voiceURI === uri) || null;
+    }
+  };
+
+  const voiceSelect = document.getElementById('voice');
+
+  function renderVoices() {
+    const groups = new Map();
+    for (const v of voices.load()) {
+      const key = v.lang || '其他';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(v);
+    }
+    voiceSelect.innerHTML = '';
+    for (const [lang, items] of groups) {
+      const og = document.createElement('optgroup');
+      og.label = lang;
+      for (const v of items) {
+        const o = document.createElement('option');
+        o.value = v.voiceURI;
+        o.textContent = v.name;
+        og.append(o);
+      }
+      voiceSelect.append(og);
+    }
+    return voices.all.length;
+  }
+
+  window.tts = { chunk, voices, renderVoices };
+
+  // ---- 语音列表加载 ----
+  // Chrome 首次 getVoices() 常返回空数组,必须监听 voiceschanged 重新渲染
+  if (typeof window.speechSynthesis !== 'undefined') {
+    voices.load();
+    renderVoices();
+    window.speechSynthesis.addEventListener('voiceschanged', renderVoices);
+    if (!voiceSelect.options.length) setTimeout(renderVoices, 300);  // 兜底
+  }
 })();
 </script>
 </body>
