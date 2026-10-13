@@ -164,6 +164,15 @@
   const MIN_CHUNK = 60;    // 短于此时不在句末切,避免停顿过碎
   const SENTENCE_END = '。！？!?；;…';
 
+  // ---- 环境检测 ----
+  const SUPPORTED = typeof window.speechSynthesis !== 'undefined'
+    && typeof window.SpeechSynthesisUtterance !== 'undefined';
+
+  function isIOS() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent)
+      || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+
   // ---- chunker:把长文本切成适合朗读的小块 ----
   function chunk(text) {
     const out = [];
@@ -528,14 +537,36 @@
   window.tts = { chunk, voices, speaker, recorder, renderVoices };
   speaker.setState('idle');
 
+  // ---- 平台降级 ----
+  if (!SUPPORTED) {
+    document.querySelector('.card').innerHTML =
+      '<p style="margin:0">当前浏览器不支持语音合成(Web Speech API)。' +
+      '请改用桌面版 Chrome / Edge / Safari,或升级浏览器。</p>';
+    return;
+  }
+
+  // iOS 的 speechSynthesis 不支持 pause / resume,直接去掉暂停按钮
+  if (isIOS()) {
+    speaker.pause = () => {};
+    speaker.resume = () => {};
+    btnPause.remove();
+  }
+
   // ---- 语音列表加载 ----
   // Chrome 首次 getVoices() 常返回空数组,必须监听 voiceschanged 重新渲染
-  if (typeof window.speechSynthesis !== 'undefined') {
-    voices.load();
-    renderVoices();
-    window.speechSynthesis.addEventListener('voiceschanged', renderVoices);
-    if (!voiceSelect.options.length) setTimeout(renderVoices, 300);  // 兜底
+  voices.load();
+  renderVoices();
+  window.speechSynthesis.addEventListener('voiceschanged', renderVoices);
+  if (!voiceSelect.options.length) setTimeout(renderVoices, 300);  // 兜底
+
+  // 没有中文语音包时给出安装提示(voiceschanged 可能晚于首屏,故延迟复检)
+  function checkChineseVoice() {
+    if (!voices.all.some(v => (v.lang || '').toLowerCase().startsWith('zh'))) {
+      setStatus('未检测到中文语音包。macOS:系统设置 → 辅助功能 → 朗读内容 → ' +
+        '系统声音 → 管理声音,下载中文语音。', true);
+    }
   }
+  setTimeout(checkChineseVoice, 600);
 })();
 </script>
 </body>
