@@ -27,7 +27,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "dmg"],
+    "targets": "all",
     "icon": ["icons/icon.png"],
     "resources": ["models/kitten-nano-en-v0_2-fp16/"]
   }
