@@ -331,6 +331,25 @@
     btnPlay.disabled = !textEl.value.trim() || speaker.state !== 'idle';
   }
 
+  // ---- UI:语速 ----
+  const rateEl = document.getElementById('rate');
+  const rateValueEl = document.getElementById('rateValue');
+
+  function applyRate(value) {
+    const rate = Math.min(3, Math.max(0.5, Number(value) || 1));
+    speaker.rate = rate;
+    rateValueEl.textContent = rate.toFixed(1) + 'x';
+    return rate;
+  }
+
+  rateEl.addEventListener('input', () => applyRate(rateEl.value));
+  // 点击数值复位到 1.0x
+  rateValueEl.addEventListener('click', () => {
+    rateEl.value = '1';
+    applyRate(1);
+  });
+  applyRate(rateEl.value);
+
   // ---- UI:播放状态映射到按钮 ----
   speaker.onStateChange = (state) => {
     const active = state === 'playing' || state === 'paused';
