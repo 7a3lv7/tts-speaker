@@ -1,0 +1,12 @@
+# 模型文件不进版本库(约 24.5MB 二进制,由 app/scripts/prepare-model.sh 生成)
+app/src-tauri/models/**/*.onnx
+app/src-tauri/models/**/*.bin
+app/src-tauri/models/**/*.txt
+app/src-tauri/models/**/espeak-ng-data/
+
+# 模型下载缓存(源头,由 HF 下载)
+.models/
+
+# node / rust
+node_modules/
+app/src-tauri/target/

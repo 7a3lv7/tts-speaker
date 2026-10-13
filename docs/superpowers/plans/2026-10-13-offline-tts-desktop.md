@@ -46,16 +46,22 @@ mkdir -p app/src app/src-tauri/src app/src-tauri/capabilities app/icons app/scri
 
 - [ ] **Step 2: 生成应用图标**
 
-Tauri 打包必须有图标。用 Python 内置 zlib 手写一张 1024×1024 的 PNG(不依赖 PIL):
+Tauri 打包必须有图标,且**必须是 RGBA 格式**(颜色类型 6)——RGB(类型 2)会被 `generate_context!` 拒绝,报 `icon ... is not RGBA`。
+
+图标路径是相对 `src-tauri/tauri.conf.json` 解析的,所以要放在 `app/src-tauri/icons/`(不是 `app/icons/`)。
+
+用 Python 内置 zlib 手写一张 1024×1024 的 RGBA PNG(不依赖 PIL):
 
 ```bash
+mkdir -p app/src-tauri/icons
 python3 - <<'PY'
 import zlib, struct
 W = H = 1024
-BG = (28, 28, 32)      # 深色底
-FG = (109, 141, 255)   # 与界面主色一致
+def chunk(t, d):
+    return struct.pack('>I', len(d)) + t + d + struct.pack('>I', zlib.crc32(t + d) & 0xffffffff)
+BG = (28, 28, 32, 255)      # 深色底
+FG = (109, 141, 255, 255)   # 与界面主色一致
 def px(x, y):
-    # 居中的圆角方块 + 中间一个模拟声波的竖条
     cx, cy, r = W//2, H//2, 340
     if (x-cx)**2 + (y-cy)**2 <= r*r:
         if abs(x-cx) <= 40 and abs(y-cy) <= 200:
@@ -67,17 +73,16 @@ def px(x, y):
 raw = b''
 for y in range(H):
     raw += b'\x00' + b''.join(bytes(px(x, y)) for x in range(W))
-def chunk(t, d):
-    c = struct.pack('>I', len(d)) + t + d
-    return c + struct.pack('>I', zlib.crc32(t + d) & 0xffffffff)
 png = (b'\x89PNG\r\n\x1a\n'
-       + chunk(b'IHDR', struct.pack('>IIBBBBB', W, H, 8, 2, 0, 0, 0))
+       + chunk(b'IHDR', struct.pack('>IIBBBBB', W, H, 8, 6, 0, 0, 0))  # 6 = RGBA
        + chunk(b'IDAT', zlib.compress(raw, 9))
        + chunk(b'IEND', b''))
-open('app/icons/icon.png', 'wb').write(png)
+open('app/src-tauri/icons/icon.png', 'wb').write(png)
 print('图标已生成:', len(png), 'bytes')
 PY
 ```
+
+顶部 `mkdir -p` 里的 `app/icons` 要去掉(图标不放那里)。
 
 - [ ] **Step 3: 写 package.json**
 
