@@ -312,6 +312,90 @@
     }
   };
 
+  // ---- recorder:录制标签页音频并导出为 webm ----
+  // speechSynthesis 不暴露音频数据,只能用 getDisplayMedia 捕获本标签页声音再录。
+  const recorder = {
+    mr: null,
+    stream: null,
+    chunks: [],
+    onFinish: null,   // 由 UI 层赋值:(reason) => void,reason 为 saved/aborted/empty
+
+    supported() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) return false;
+      if (typeof MediaRecorder === 'undefined') return false;
+      // Safari 的 getDisplayMedia 拿不到音轨,直接判不支持
+      const ua = navigator.userAgent;
+      const isSafari = /safari/i.test(ua) && !/chrome|chromium|edg|android/i.test(ua);
+      return !isSafari;
+    },
+
+    pickMime() {
+      const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
+      return candidates.find(t => MediaRecorder.isTypeSupported(t)) || '';
+    },
+
+    async start() {
+      // Chrome 要求同时请求 video,才能共享标签页音频
+      this.stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      const audioTracks = this.stream.getAudioTracks();
+      if (!audioTracks.length) {
+        this.release();
+        throw new Error('NO_AUDIO');
+      }
+      // 用户点浏览器共享栏的「停止共享」时,音轨会 ended
+      audioTracks[0].addEventListener('ended', () => this.abort());
+
+      const mimeType = this.pickMime();
+      this.mr = new MediaRecorder(new MediaStream(audioTracks), mimeType ? { mimeType } : undefined);
+      this.chunks = [];
+      this.mr.ondataavailable = (e) => {
+        if (e.data && e.data.size) this.chunks.push(e.data);
+      };
+      this.mr.onstop = () => this.save(mimeType);
+      this.mr.start();
+    },
+
+    release() {
+      if (this.stream) {
+        this.stream.getTracks().forEach(t => t.stop());
+        this.stream = null;
+      }
+    },
+
+    save(mimeType) {
+      const type = mimeType || 'audio/webm';
+      this.release();
+      const chunks = this.chunks;
+      this.chunks = [];
+      if (!chunks.length) { this.onFinish && this.onFinish('empty'); return; }
+      const blob = new Blob(chunks, { type });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'tts-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+        + (type.includes('mp4') ? '.m4a' : '.webm');
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      this.onFinish && this.onFinish('saved');
+    },
+
+    // 共享被中止:丢弃数据,不下载
+    abort() {
+      this.chunks = [];
+      if (this.mr && this.mr.state !== 'inactive') {
+        this.mr.onstop = null;
+        this.mr.stop();
+      }
+      this.release();
+      this.onFinish && this.onFinish('aborted');
+    },
+
+    stop() {
+      if (this.mr && this.mr.state !== 'inactive') this.mr.stop();
+      else this.release();
+    }
+  };
+
   // ---- UI:元素引用与通用工具 ----
   const textEl = document.getElementById('text');
   const countEl = document.getElementById('count');
@@ -329,6 +413,7 @@
   function refresh() {
     countEl.textContent = textEl.value.length + ' / ' + MAX_CHARS + ' 字';
     btnPlay.disabled = !textEl.value.trim() || speaker.state !== 'idle';
+    refreshExportButton();
   }
 
   // ---- UI:语速 ----
@@ -358,6 +443,8 @@
     btnPause.textContent = state === 'paused' ? '▶ 继续' : '⏸ 暂停';
     btnStop.disabled = state === 'idle';
     textEl.readOnly = state !== 'idle';
+    // 朗读自然播完或被停止时,收尾录制
+    if (state === 'idle' && recording) recorder.stop();
     refresh();
   };
 
@@ -378,7 +465,67 @@
 
   textEl.addEventListener('input', refresh);
 
-  window.tts = { chunk, voices, speaker, renderVoices };
+  // ---- UI:导出(录制标签页音频) ----
+  let recording = false;
+
+  function refreshExportButton() {
+    if (!recorder.supported()) {
+      btnExport.disabled = true;
+      btnExport.title = '当前浏览器不支持捕获标签页音频,需要桌面版 Chrome 或 Edge';
+      return;
+    }
+    btnExport.title = '录制本次朗读并下载为 webm';
+    btnExport.disabled = recording ? false : (!textEl.value.trim() || speaker.state !== 'idle');
+  }
+
+  recorder.onFinish = (reason) => {
+    recording = false;
+    btnExport.textContent = '⤓ 导出';
+    refreshExportButton();
+    if (reason === 'saved') setStatus('录制完成,文件已下载。');
+    else if (reason === 'aborted') setStatus('录制已中止:共享被停止。', true);
+    else if (reason === 'empty') setStatus('没有录到音频,请确认共享时勾选了「分享标签页音频」。', true);
+  };
+
+  btnExport.addEventListener('click', async () => {
+    if (recording) {          // 再次点击 = 立即结束(顺带停掉朗读)
+      speaker.stop();
+      return;
+    }
+    const text = textEl.value.trim();
+    if (!text) return;
+
+    const go = window.confirm(
+      '导出会把本次朗读录成 webm 文件。\n\n' +
+      '在接下来弹出的窗口里:\n' +
+      '1. 选择「此标签页」\n' +
+      '2. 务必勾选「分享标签页音频」\n\n' +
+      '录制时长等于朗读时长,期间请不要静音。开始吗?'
+    );
+    if (!go) return;
+
+    try {
+      await recorder.start();
+    } catch (err) {
+      let msg;
+      if (err && err.name === 'NotAllowedError') msg = '已取消共享,或没有勾选「分享标签页音频」。';
+      else if (err && err.message === 'NO_AUDIO') msg = '没有拿到音频轨,请在共享时勾选「分享标签页音频」。';
+      else msg = '无法开始录制:' + ((err && err.message) || String(err));
+      setStatus(msg, true);
+      return;
+    }
+
+    recording = true;
+    btnExport.textContent = '⏹ 结束录制';
+    refreshExportButton();
+    setStatus('正在录制并朗读…');
+    speaker.voiceURI = voiceSelect.value;
+    speaker.start(text);
+  });
+
+  refresh();
+
+  window.tts = { chunk, voices, speaker, recorder, renderVoices };
   speaker.setState('idle');
 
   // ---- 语音列表加载 ----
