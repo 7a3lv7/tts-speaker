@@ -158,7 +158,35 @@
 <script>
 (() => {
   'use strict';
-  // 模块在此依次填入:chunker → voices → speaker → recorder → UI
+  // ---- 常量 ----
+  const MAX_CHARS = 5000;
+  const MAX_CHUNK = 200;   // 单块上限,防止 Chrome 截断朗读
+  const MIN_CHUNK = 60;    // 短于此时不在句末切,避免停顿过碎
+  const SENTENCE_END = '。！？!?；;…';
+
+  // ---- chunker:把长文本切成适合朗读的小块 ----
+  function chunk(text) {
+    const out = [];
+    let buf = '';
+    for (const ch of String(text)) {
+      if (ch === '\n') {
+        if (buf.trim()) out.push(buf.trim());
+        buf = '';
+        continue;
+      }
+      buf += ch;
+      const tooLong = buf.length >= MAX_CHUNK;
+      const endsSentence = SENTENCE_END.includes(ch) && buf.length >= MIN_CHUNK;
+      if (tooLong || endsSentence) {
+        if (buf.trim()) out.push(buf.trim());
+        buf = '';
+      }
+    }
+    if (buf.trim()) out.push(buf.trim());
+    return out;
+  }
+
+  window.tts = { chunk };
 })();
 </script>
 </body>
