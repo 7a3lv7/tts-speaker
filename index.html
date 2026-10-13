@@ -234,7 +234,133 @@
     return voices.all.length;
   }
 
-  window.tts = { chunk, voices, renderVoices };
+  // ---- speaker:分块朗读队列 ----
+  const speaker = {
+    queue: [],
+    index: 0,
+    state: 'idle',        // idle | playing | paused
+    rate: 1,
+    voiceURI: '',
+    generation: 0,
+    onStateChange: null,  // 由 UI 层赋值
+
+    setState(s) {
+      this.state = s;
+      if (this.onStateChange) this.onStateChange(s);
+    },
+
+    // 内部:清空队列并让所有旧回调失效,不通知 UI
+    _reset() {
+      this.generation++;
+      const s = window.speechSynthesis;
+      // Chrome 在 paused 状态下 cancel 可能不生效,先 resume 再 cancel
+      if (s.paused) s.resume();
+      s.cancel();
+      this.queue = [];
+      this.index = 0;
+    },
+
+    start(text) {
+      this._reset();
+      this.queue = chunk(text);
+      this.index = 0;
+      if (!this.queue.length) { this.setState('idle'); return; }
+      this.setState('playing');
+      this.speakCurrent(this.generation);
+    },
+
+    speakCurrent(gen) {
+      if (gen !== this.generation) return;
+      const piece = this.queue[this.index];
+      if (piece === undefined) { this.setState('idle'); return; }
+
+      const u = new SpeechSynthesisUtterance(piece);
+      u.rate = this.rate;
+      const v = voices.get(this.voiceURI);
+      if (v) { u.voice = v; u.lang = v.lang; }
+
+      u.onend = () => {
+        if (gen !== this.generation) return;   // 已被 stop()/start() 取消
+        this.index++;
+        this.speakCurrent(gen);
+      };
+      u.onerror = (e) => {
+        if (gen !== this.generation) return;
+        if (e.error === 'interrupted' || e.error === 'canceled') return;
+        console.warn('朗读出错:', e.error);
+        this.stop();
+      };
+
+      window.speechSynthesis.speak(u);
+    },
+
+    pause() {
+      if (this.state !== 'playing') return;
+      window.speechSynthesis.pause();
+      this.setState('paused');
+    },
+
+    resume() {
+      if (this.state !== 'paused') return;
+      window.speechSynthesis.resume();
+      this.setState('playing');
+    },
+
+    stop() {
+      this._reset();
+      this.setState('idle');
+    }
+  };
+
+  // ---- UI:元素引用与通用工具 ----
+  const textEl = document.getElementById('text');
+  const countEl = document.getElementById('count');
+  const statusEl = document.getElementById('status');
+  const btnPlay = document.getElementById('play');
+  const btnPause = document.getElementById('pause');
+  const btnStop = document.getElementById('stop');
+  const btnExport = document.getElementById('export');
+
+  function setStatus(msg, isError) {
+    statusEl.textContent = msg || '';
+    statusEl.classList.toggle('error', !!isError);
+  }
+
+  function refresh() {
+    countEl.textContent = textEl.value.length + ' / ' + MAX_CHARS + ' 字';
+    btnPlay.disabled = !textEl.value.trim() || speaker.state !== 'idle';
+  }
+
+  // ---- UI:播放状态映射到按钮 ----
+  speaker.onStateChange = (state) => {
+    const active = state === 'playing' || state === 'paused';
+    btnPlay.hidden = active;
+    btnPause.hidden = !active;
+    btnPause.textContent = state === 'paused' ? '▶ 继续' : '⏸ 暂停';
+    btnStop.disabled = state === 'idle';
+    textEl.readOnly = state !== 'idle';
+    refresh();
+  };
+
+  btnPlay.addEventListener('click', () => {
+    const text = textEl.value.trim();
+    if (!text) return;
+    setStatus('');
+    speaker.voiceURI = voiceSelect.value;
+    speaker.start(text);
+  });
+
+  btnPause.addEventListener('click', () => {
+    if (speaker.state === 'playing') speaker.pause();
+    else if (speaker.state === 'paused') speaker.resume();
+  });
+
+  btnStop.addEventListener('click', () => speaker.stop());
+
+  textEl.addEventListener('input', refresh);
+
+  window.tts = { chunk, voices, speaker, renderVoices };
+  speaker.setState('idle');
 
   // ---- 语音列表加载 ----
   // Chrome 首次 getVoices() 常返回空数组,必须监听 voiceschanged 重新渲染
