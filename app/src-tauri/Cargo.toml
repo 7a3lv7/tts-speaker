@@ -11,6 +11,7 @@ tauri = { version = "2", features = ["protocol-asset"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sherpa-onnx = "1.13.8"
+tauri-plugin-dialog = "2.8.2"
 
 [profile.release]
 codegen-units = 1
