@@ -444,6 +444,35 @@
   });
   applyRate(rateEl.value);
 
+  // ---- 偏好记忆 ----
+  const STORE = {
+    read() {
+      try { return JSON.parse(localStorage.getItem('tts.prefs') || '{}'); }
+      catch { return {}; }
+    },
+    write(patch) {
+      try {
+        localStorage.setItem('tts.prefs', JSON.stringify({ ...this.read(), ...patch }));
+      } catch { /* 隐私模式或受限环境下静默失败 */ }
+    }
+  };
+
+  const savedPrefs = STORE.read();
+  if (savedPrefs.rate) {
+    rateEl.value = String(savedPrefs.rate);
+    applyRate(savedPrefs.rate);
+  }
+  rateEl.addEventListener('change', () => STORE.write({ rate: speaker.rate }));
+  voiceSelect.addEventListener('change', () => STORE.write({ voiceURI: voiceSelect.value }));
+
+  // 发音人偏好要等列表就绪后再套用
+  function restoreVoice() {
+    if (savedPrefs.voiceURI && voices.get(savedPrefs.voiceURI)) {
+      voiceSelect.value = savedPrefs.voiceURI;
+    }
+  }
+  setTimeout(restoreVoice, 700);
+
   // ---- UI:播放状态映射到按钮 ----
   speaker.onStateChange = (state) => {
     const active = state === 'playing' || state === 'paused';
@@ -533,6 +562,26 @@
   });
 
   refresh();
+
+  // ---- 快捷键 ----
+  document.addEventListener('keydown', (e) => {
+    const tag = (e.target.tagName || '').toLowerCase();
+    const inControl = tag === 'textarea' || tag === 'input'
+      || tag === 'select' || tag === 'button';
+
+    // Esc:焦点在哪都能停止朗读
+    if (e.key === 'Escape' && speaker.state !== 'idle') {
+      speaker.stop();
+      e.preventDefault();
+      return;
+    }
+    // 空格:只在没有聚焦到控件时当作播放 / 暂停
+    if (e.code === 'Space' && !inControl) {
+      e.preventDefault();
+      if (speaker.state === 'idle') btnPlay.click();
+      else btnPause.click();
+    }
+  });
 
   window.tts = { chunk, voices, speaker, recorder, renderVoices };
   speaker.setState('idle');
