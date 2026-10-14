@@ -7,6 +7,49 @@ use sherpa_onnx::{
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
+/// Windows 上 Tauri 解析出的资源路径可能带 `\\?\` 扩展长度前缀。
+/// sherpa-onnx 底层用 C++ 的 `std::ifstream` 打开模型文件,而该前缀只被
+/// 宽字符版 Win32 API 支持,会导致**文件明明存在却打不开、引擎创建失败**。
+/// 这里在传给引擎前把前缀剥掉。
+fn plain_path(p: &Path) -> String {
+    let s = p.to_string_lossy();
+    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{rest}")
+    } else if let Some(rest) = s.strip_prefix(r"\\?\") {
+        rest.to_string()
+    } else {
+        s.into_owned()
+    }
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::plain_path;
+    use std::path::Path;
+
+    #[test]
+    fn strips_drive_letter_prefix() {
+        assert_eq!(
+            plain_path(Path::new(r"\\?\C:\Program Files (x86)\TTS\models\model.onnx")),
+            r"C:\Program Files (x86)\TTS\models\model.onnx"
+        );
+    }
+
+    #[test]
+    fn strips_unc_prefix_back_to_unc() {
+        assert_eq!(
+            plain_path(Path::new(r"\\?\UNC\server\share\m.onnx")),
+            r"\\server\share\m.onnx"
+        );
+    }
+
+    #[test]
+    fn leaves_normal_paths_untouched() {
+        assert_eq!(plain_path(Path::new("/Users/x/model.onnx")), "/Users/x/model.onnx");
+        assert_eq!(plain_path(Path::new(r"C:\models\m.onnx")), r"C:\models\m.onnx");
+    }
+}
+
 pub struct SynthResult {
     pub samples: Vec<f32>,
     pub sample_rate: u32,
@@ -35,10 +78,10 @@ impl Engine {
         let config = OfflineTtsConfig {
             model: OfflineTtsModelConfig {
                 kitten: OfflineTtsKittenModelConfig {
-                    model: Some(d.join("model.fp16.onnx").to_string_lossy().into_owned()),
-                    voices: Some(d.join("voices.bin").to_string_lossy().into_owned()),
-                    tokens: Some(d.join("tokens.txt").to_string_lossy().into_owned()),
-                    data_dir: Some(d.join("espeak-ng-data").to_string_lossy().into_owned()),
+                    model: Some(plain_path(&d.join("model.fp16.onnx"))),
+                    voices: Some(plain_path(&d.join("voices.bin"))),
+                    tokens: Some(plain_path(&d.join("tokens.txt"))),
+                    data_dir: Some(plain_path(&d.join("espeak-ng-data"))),
                     ..Default::default()
                 },
                 num_threads: 2,
