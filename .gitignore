@@ -10,3 +10,8 @@ app/src-tauri/models/**/espeak-ng-data/
 # node / rust
 node_modules/
 app/src-tauri/target/
+
+# Angular 构建产物与缓存
+app/dist/
+app/.angular/
+

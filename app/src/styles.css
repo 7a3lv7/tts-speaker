@@ -1,125 +1,21 @@
-:root {
-    --bg: #f4f4f6;
-    --surface: #ffffff;
-    --surface-2: #fafafb;
-    --text: #1b1b1f;
-    --muted: #71717a;
-    --border: #e3e3e8;
-    --accent: #3563e9;
-    --danger: #c8382f;
-    --radius: 14px;
-    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 10px 30px rgba(0,0,0,.06);
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #111114;
-      --surface: #1b1b20;
-      --surface-2: #232329;
-      --text: #ededf2;
-      --muted: #97979f;
-      --border: #2c2c33;
-      --accent: #6d8dff;
-      --danger: #ff6b61;
-      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
-    }
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--text);
-    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "PingFang SC",
-          "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
-    -webkit-font-smoothing: antialiased;
-  }
-  main { max-width: 640px; margin: 0 auto; padding: 40px 20px 64px; }
-  h1 { font-size: 19px; font-weight: 600; letter-spacing: .01em; margin: 0 0 20px; }
-  .card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    padding: 18px;
-  }
-  textarea {
-    width: 100%;
-    min-height: 220px;
-    resize: vertical;
-    padding: 14px;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    background: var(--surface-2);
-    color: inherit;
-    font: inherit;
-    line-height: 1.7;
-  }
-  textarea::placeholder { color: var(--muted); }
-  textarea:focus, select:focus {
-    outline: 2px solid var(--accent);
-    outline-offset: 1px;
-    border-color: transparent;
-  }
-  .meta {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 8px;
-    font-size: 12px;
-    color: var(--muted);
-  }
-  #count.limit { color: var(--danger); }   /* 已达上限,再多输会被浏览器截断 */
-  .row { display: flex; align-items: center; gap: 12px; margin-top: 18px; }
-  .row > label { flex: none; width: 40px; font-size: 13px; color: var(--muted); }
-  input[type=range] { flex: 1; accent-color: var(--accent); min-width: 0; }
-  output {
-    flex: none;
-    width: 48px;
-    text-align: right;
-    font-size: 13px;
-    font-variant-numeric: tabular-nums;
-    color: var(--muted);
-    cursor: pointer;
-  }
-  select {
-    flex: 1;
-    min-width: 0;
-    padding: 9px 10px;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    background: var(--surface-2);
-    color: inherit;
-    font: inherit;
-  }
-  .actions { display: flex; gap: 10px; margin-top: 22px; flex-wrap: wrap; }
-  button {
-    padding: 10px 18px;
-    border: 1px solid transparent;
-    border-radius: 10px;
-    background: var(--accent);
-    color: #fff;
-    font: inherit;
-    font-weight: 500;
-    cursor: pointer;
-    transition: filter .15s, opacity .15s;
-  }
-  button:hover:not(:disabled) { filter: brightness(1.08); }
-  button:disabled { opacity: .38; cursor: not-allowed; }
-  button.ghost { background: transparent; color: var(--text); border-color: var(--border); }
-  button.ghost:hover:not(:disabled) { background: var(--surface-2); filter: none; }
-  #export { margin-left: auto; }
-  #status {
-    min-height: 20px;
-    margin: 14px 0 0;
-    font-size: 13px;
-    color: var(--muted);
-  }
-  #status.error { color: var(--danger); }
-  @media (max-width: 520px) {
-    main { padding: 24px 14px 48px; }
-    .actions button { flex: 1 1 calc(50% - 5px); }
-    #export { margin-left: 0; }
-  }
+/* 全局样式:ng-zorro 的样式由 angular.json 单独引入 */
 
-/* ---- 桌面应用专用 ---- */
-body { user-select: none; }
-textarea, #status { user-select: text; }
+body {
+  margin: 0;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
 
+/* 桌面应用:禁用文本选择拖拽,更像原生;输入区域除外 */
+body {
+  user-select: none;
+}
+
+textarea,
+input,
+.ant-select,
+.status {
+  user-select: text;
+}

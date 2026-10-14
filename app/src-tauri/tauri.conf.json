@@ -4,10 +4,12 @@
   "version": "0.1.0",
   "identifier": "com.jaelynwong.ttsapp",
   "build": {
-    "frontendDist": "../src"
+    "frontendDist": "../dist/tts-app/browser",
+    "devUrl": "http://localhost:4200",
+    "beforeDevCommand": "npm start",
+    "beforeBuildCommand": "npm run build:web"
   },
   "app": {
-    "withGlobalTauri": true,
     "windows": [
       {
         "title": "文字转语音",
