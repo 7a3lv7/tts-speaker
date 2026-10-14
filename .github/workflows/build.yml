@@ -42,14 +42,37 @@ jobs:
         with:
           workspaces: './app/src-tauri -> target'
 
-      # sherpa-onnx-sys 的 build.rs 把预编译库放在 target/sherpa-onnx-prebuilt/,
-      # 且**只检查目录是否存在、不校验内容完整性**。rust-cache 的 key 随 Cargo.lock
-      # 变化,一旦缓存只恢复了一部分,build.rs 会跳过下载,最终链接时报
+      # sherpa-onnx-sys 的 build.rs 自己下载预编译库,但它**只检查目录是否存在、
+      # 不校验内容完整性**,且下载无校验和、无原子重命名 —— 任何中断都会留下
+      # 一个"看起来已下载"的坏缓存,之后表现为
       # "could not find native static library sherpa-onnx-c-api"。
-      # 每次清掉重新下载(20–117MB),换取构建确定性。
+      #
+      # 因此这里把下载接管过来:显式 curl(带重试、有日志),再通过
+      # SHERPA_ONNX_ARCHIVE_DIR 指给 build.rs,BUILD 阶段直接解压本地归档。
       - name: 清理 sherpa-onnx 预编译库缓存
         shell: bash
         run: rm -rf app/src-tauri/target/sherpa-onnx-prebuilt
+
+      - name: 预下载 sherpa-onnx 预编译库
+        shell: bash
+        working-directory: app
+        run: |
+          set -euo pipefail
+          VER=1.13.8
+          case "${{ matrix.label }}" in
+            macOS-arm64) A="sherpa-onnx-v${VER}-osx-arm64-static-lib.tar.bz2" ;;
+            macOS-x64)   A="sherpa-onnx-v${VER}-osx-x64-static-lib.tar.bz2" ;;
+            Windows-x64) A="sherpa-onnx-v${VER}-win-x64-static-MT-Release-lib.tar.bz2" ;;
+            *) echo "未知平台 ${{ matrix.label }}"; exit 1 ;;
+          esac
+          mkdir -p .sherpa-archives
+          URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/v${VER}/${A}"
+          echo "下载 $URL"
+          curl -fL --retry 3 --retry-delay 5 --retry-all-errors \
+               -o ".sherpa-archives/${A}" "$URL"
+          # bzip2 完整性校验:解压测试能捕获截断的下载
+          bzip2 -t ".sherpa-archives/${A}"
+          ls -lh .sherpa-archives/
 
       - name: 安装前端依赖
         working-directory: app
@@ -64,9 +87,19 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHERPA_ONNX_ARCHIVE_DIR: ${{ github.workspace }}/app/.sherpa-archives
         with:
           projectPath: app
           args: ${{ matrix.args }}
+
+      - name: 诊断(构建失败时输出预编译库状态)
+        if: failure()
+        shell: bash
+        run: |
+          echo "--- 归档目录 ---"
+          ls -lh app/.sherpa-archives/ 2>/dev/null || echo "(空)"
+          echo "--- 解压后的库 ---"
+          find app/src-tauri/target/sherpa-onnx-prebuilt -name "*.a" 2>/dev/null | head -10 || echo "(无)"
 
       - name: 上传产物
         uses: actions/upload-artifact@v4
