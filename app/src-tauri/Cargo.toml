@@ -3,6 +3,12 @@ name = "tts-app"
 version = "0.1.0"
 edition = "2021"
 
+# 移动端要求 crate 能产出库:Android 用 cdylib(.so),iOS 用 staticlib(.a),
+# rlib 给桌面端 main.rs 链接。
+[lib]
+name = "tts_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -10,8 +16,16 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["protocol-asset"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sherpa-onnx = "1.13.8"
 tauri-plugin-dialog = "2.8.2"
+tauri-plugin-fs = "2.7.0"
+
+# Android / iOS 只支持动态链接(sherpa-onnx-sys 的 build.rs 会强制校验),
+# 桌面平台用默认的静态链接,产物自包含无需分发 dylib。
+[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
+sherpa-onnx = { version = "1.13.8", default-features = false, features = ["shared"] }
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+sherpa-onnx = "1.13.8"
 
 [profile.release]
 codegen-units = 1

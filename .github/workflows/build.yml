@@ -69,3 +69,66 @@ jobs:
             app/src-tauri/target/**/release/bundle/macos/*.app
             app/src-tauri/target/**/release/bundle/msi/*.msi
             app/src-tauri/target/**/release/bundle/nsis/*.exe
+
+  android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          # Tauri 的 android init 会按需使用这几个 target,一次装齐避免中途失败
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './app/src-tauri -> target'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '21'
+
+      # 本地开发用的是 NDK 28.2.13676358(= r28b),CI 保持同版本避免行为差异
+      - name: 安装 Android NDK
+        id: setup-ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r28b
+          add-to-path: false
+
+      - name: 安装前端依赖
+        working-directory: app
+        run: npm ci
+
+      - name: 下载模型并裁剪
+        working-directory: app
+        shell: bash
+        run: ./scripts/fetch-model-ci.sh
+
+      # gen/ 已被 .gitignore 排除,Android 工程在 CI 上现生成
+      - name: 初始化 Android 工程
+        working-directory: app
+        env:
+          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: npx tauri android init
+
+      # debug APK:免签名,可直接安装到设备测试。
+      # 正式发布需要配置 keystore 并去掉 --debug。
+      - name: 构建 APK
+        working-directory: app
+        env:
+          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: npx tauri android build --target aarch64 --apk --debug
+
+      - name: 上传 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: tts-Android-arm64
+          if-no-files-found: warn
+          path: app/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
