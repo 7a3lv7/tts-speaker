@@ -98,6 +98,13 @@ jobs:
         with:
           workspaces: './app/src-tauri -> target'
 
+      # 与 desktop job 同样的处理:sherpa-onnx-sys 的 build.rs 只检查目录存在、
+      # 不校验内容。缓存不完整时会跳过下载,随后要么链接失败(桌面),
+      # 要么 panic "No shared runtime libraries found"(Android)。
+      - name: 清理 sherpa-onnx 预编译库缓存
+        shell: bash
+        run: rm -rf app/src-tauri/target/sherpa-onnx-prebuilt
+
       - uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
