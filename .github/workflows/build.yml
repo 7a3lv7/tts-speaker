@@ -1,9 +1,10 @@
 name: Build
 
-# 手动触发,或打 tag(如 v0.1.0)时自动构建
+# 手动触发 / 任意分支 push / 打 tag(如 v0.1.0)
 on:
   workflow_dispatch:
   push:
+    branches: ['**']
     tags: ['v*']
 
 jobs:
