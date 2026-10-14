@@ -144,6 +144,15 @@ export class App {
     }
   }
 
+  /**
+   * 屏蔽 WebView 的原生右键菜单(Reload / Back / Inspect Element 那一套)。
+   * 桌面应用里这些是开发期残留,不该出现在成品界面。
+   */
+  @HostListener('document:contextmenu', ['$event'])
+  onContextMenu(e: MouseEvent): void {
+    e.preventDefault();
+  }
+
   // ---- 内部 ----
 
   private syncPlayer(): void {

@@ -5,14 +5,13 @@
     <textarea
       nz-input
       class="editor"
-      rows="9"
       [maxlength]="maxChars"
       [readonly]="busy()"
       [ngModel]="text()"
       (ngModelChange)="text.set($event)"
       placeholder="在这里输入或粘贴英文文字…"
       cdkTextareaAutosize
-      cdkAutosizeMinRows="2"
+      cdkAutosizeMinRows="4"
       cdkAutosizeMaxRows="6"
     ></textarea>
 
@@ -44,18 +43,18 @@
       <label class="field__label">声音</label>
       <nz-select class="field__control" [ngModel]="sid()" (ngModelChange)="onSidChange($event)">
         @for (v of voices; track v.sid) {
-        <nz-option [nzValue]="v.sid" [nzLabel]="v.name + ' · ' + v.gender" />
+          <nz-option [nzValue]="v.sid" [nzLabel]="v.name + ' · ' + v.gender"/>
         }
       </nz-select>
     </div>
 
     <div class="actions">
       @if (state() === 'idle') {
-      <button nz-button nzType="primary" [disabled]="!canPlay()" (click)="play()">播放</button>
+        <button nz-button nzType="primary" [disabled]="!canPlay()" (click)="play()">播放</button>
       } @else {
-      <button nz-button nzType="primary" (click)="pause()">
-        {{ state() === 'paused' ? '继续' : '暂停' }}
-      </button>
+        <button nz-button nzType="primary" (click)="pause()">
+          {{ state() === 'paused' ? '继续' : '暂停' }}
+        </button>
       }
       <button nz-button [disabled]="!busy()" (click)="stop()">停止</button>
       <button
@@ -70,7 +69,7 @@
     </div>
 
     @if (status()) {
-    <div class="status" [class.status--error]="!!speechError()">{{ status() }}</div>
+      <div class="status" [class.status--error]="!!speechError()">{{ status() }}</div>
     }
   </div>
 </div>

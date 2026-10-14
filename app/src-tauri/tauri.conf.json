@@ -15,8 +15,9 @@
         "title": "文字转语音",
         "width": 720,
         "height": 700,
-        "minWidth": 420,
-        "minHeight": 480
+        "resizable": false,
+        "maximizable": false,
+        "fullscreen": false
       }
     ],
     "security": {

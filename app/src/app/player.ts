@@ -1,13 +1,13 @@
-import { Injectable, signal } from '@angular/core';
-import { chunk } from './chunker';
-import { tts, DEFAULT_SID, DEFAULT_SPEED } from './tts';
+import {Injectable, signal} from '@angular/core';
+import {chunk} from './chunker';
+import {DEFAULT_SID, DEFAULT_SPEED, tts} from './tts';
 
 export type PlayerState = 'idle' | 'playing' | 'paused';
 
 /** 播放当前句时,提前合成后面几句,填补句间空隙。 */
 const PRE_BUFFER = 2;
 
-@Injectable({ providedIn: 'root' })
+@Injectable({providedIn: 'root'})
 export class PlayerService {
   private readonly _state = signal<PlayerState>('idle');
   private readonly _error = signal('');
