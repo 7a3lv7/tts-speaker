@@ -42,6 +42,15 @@ jobs:
         with:
           workspaces: './app/src-tauri -> target'
 
+      # sherpa-onnx-sys 的 build.rs 把预编译库放在 target/sherpa-onnx-prebuilt/,
+      # 且**只检查目录是否存在、不校验内容完整性**。rust-cache 的 key 随 Cargo.lock
+      # 变化,一旦缓存只恢复了一部分,build.rs 会跳过下载,最终链接时报
+      # "could not find native static library sherpa-onnx-c-api"。
+      # 每次清掉重新下载(20–117MB),换取构建确定性。
+      - name: 清理 sherpa-onnx 预编译库缓存
+        shell: bash
+        run: rm -rf app/src-tauri/target/sherpa-onnx-prebuilt
+
       - name: 安装前端依赖
         working-directory: app
         run: npm ci
@@ -118,13 +127,19 @@ jobs:
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: npx tauri android init
 
-      # debug APK:免签名,可直接安装到设备测试。
-      # 正式发布需要配置 keystore 并去掉 --debug。
-      - name: 构建 APK
+      # gen/ 每次都是全新的,所以对 Gradle 工程的改动(混淆、签名)靠脚本重放
+      - name: 修补 Android 工程(混淆与签名)
+        working-directory: app
+        shell: bash
+        run: ./scripts/patch-android-release.sh
+
+      # release 构建:开启混淆与资源收缩,使用 debug 签名(可直接装机测试)。
+      # 正式发布时把 patch 脚本里的 signingConfig 换成 release keystore。
+      - name: 构建 release APK
         working-directory: app
         env:
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-        run: npx tauri android build --target aarch64 --apk --debug
+        run: npx tauri android build --target aarch64 --apk
 
       - name: 上传 APK
         uses: actions/upload-artifact@v4
