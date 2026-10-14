@@ -15,7 +15,4 @@ app/src-tauri/target/
 app/dist/
 app/.angular/
 
-
-# 临时截图/调试素材(不要提交)
-/bad.png
-/screenshot*.png
+.idea
