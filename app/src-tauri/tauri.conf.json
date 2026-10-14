@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "文字转语音",
+        "title": "tts",
         "width": 720,
         "height": 700,
         "resizable": false,
