@@ -7,6 +7,12 @@ on:
     branches: ['**']
     tags: ['v*']
 
+# 创建/更新 Release 需要写权限。GitHub 对新建仓库的 workflow 默认只给
+# contents: read —— 表现就是:普通 push 构建一切正常(它不发布),
+# 打 tag 时却在最后的上传环节失败。
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:
@@ -83,6 +89,7 @@ jobs:
         shell: bash
         run: ./scripts/fetch-model-ci.sh
 
+      # 只做构建;发布统一交给末尾的 release job(避免各平台并发创建 Release)
       - name: 构建
         uses: tauri-apps/tauri-action@v0
         env:
@@ -132,11 +139,28 @@ jobs:
           workspaces: './app/src-tauri -> target'
 
       # 与 desktop job 同样的处理:sherpa-onnx-sys 的 build.rs 只检查目录存在、
-      # 不校验内容。缓存不完整时会跳过下载,随后要么链接失败(桌面),
-      # 要么 panic "No shared runtime libraries found"(Android)。
+      # 不校验内容,下载也无校验和 —— 中断后留下"看起来已下载"的坏缓存,
+      # 表现为链接失败(找不到 -lsherpa-onnx-c-api / -lonnxruntime)。
+      # 这里由 CI 显式下载并做 bzip2 完整性校验,再交给 build.rs 解压。
       - name: 清理 sherpa-onnx 预编译库缓存
         shell: bash
         run: rm -rf app/src-tauri/target/sherpa-onnx-prebuilt
+
+      - name: 预下载 sherpa-onnx 预编译库(Android)
+        shell: bash
+        working-directory: app
+        run: |
+          set -euo pipefail
+          VER=1.13.8
+          # Android 是单个归档覆盖所有 ABI(内含 jniLibs/<abi>/)
+          A="sherpa-onnx-v${VER}-android.tar.bz2"
+          mkdir -p .sherpa-archives
+          URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/v${VER}/${A}"
+          echo "下载 $URL"
+          curl -fL --retry 3 --retry-delay 5 --retry-all-errors \
+               -o ".sherpa-archives/${A}" "$URL"
+          bzip2 -t ".sherpa-archives/${A}"
+          ls -lh .sherpa-archives/
 
       - uses: actions/setup-java@v4
         with:
@@ -179,11 +203,67 @@ jobs:
         working-directory: app
         env:
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          SHERPA_ONNX_ARCHIVE_DIR: ${{ github.workspace }}/app/.sherpa-archives
         run: npx tauri android build --target aarch64 --apk
 
-      - name: 上传 APK
+      - name: 诊断(构建失败时输出预编译库状态)
+        if: failure()
+        shell: bash
+        run: |
+          echo "--- 归档目录 ---"
+          ls -lh app/.sherpa-archives/ 2>/dev/null || echo "(空)"
+          echo "--- 解压后的库 ---"
+          find app/src-tauri/target/sherpa-onnx-prebuilt \( -name "*.so" -o -name "*.a" \) 2>/dev/null | head -10 || echo "(无)"
+
+      - name: 上传 APK(构建产物)
         uses: actions/upload-artifact@v4
         with:
           name: tts-Android-arm64
           if-no-files-found: warn
           path: app/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+
+  # 打 tag 时,把各平台产物汇总成一个 Release 发布。
+  #
+  # 为什么单开一个 job 而不是让各平台自己上传:
+  #   1. 三个桌面 job 并发创建同一个 Release 会竞态(谁先谁创建、后来者可能冲突)
+  #   2. 发布逻辑集中一处,失败时一眼能看出是"构建问题"还是"发布问题"
+  release:
+    needs: [build, android]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: 下载全部构建产物
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: 列出待发布文件
+        run: find dist -type f | sort
+
+      # 只挑安装包,排除 .app 目录之类的非文件产物
+      - name: 创建 Release 并上传
+        uses: softprops/action-gh-release@v2
+        with:
+          name: 文字转语音 ${{ github.ref_name }}
+          body: |
+            本地离线文字转语音,模型内置,无需联网。
+
+            **下载哪个**
+            - macOS:`*_aarch64.dmg`(Apple Silicon)/ `*_x64.dmg`(Intel)
+            - Windows:`.msi` 或 `-setup.exe`
+            - Android:`.apk`(debug 签名,安装时需允许"未知来源")
+
+            **macOS 首次打开提示"已损坏"**,在终端执行一次:
+            ```
+            xattr -cr /Applications/TTS.app
+            ```
+          files: |
+            dist/**/*.dmg
+            dist/**/*.msi
+            dist/**/*.exe
+            dist/**/*.apk
+          draft: false
+          prerelease: false
